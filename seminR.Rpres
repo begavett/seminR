@@ -1,0 +1,658 @@
+seminR
+========================================================
+author: Brandon Gavett
+date: 2022-04-13
+autosize: true
+
+Workshop Goals
+========================================================
+
+We will explore the `lavaan` package and how it can be used to perform structural equation modeling in R.
+
+Code is available at https://github.com/begavett/seminR
+
+
+Required Packages
+========================================================
+
+```{r init}
+# if necessary: install.packages("pacman")
+library(pacman)
+p_load(tidyverse, lavaan, psych, corrgram, semPlot, blavaan)
+```
+
+- `tidyverse`: a suite of data tools
+- `lavaan`: the focus of today's workshop
+- `psych`: statistical tools relevant to psychological research
+- `corrgram`: nice correlograms
+- `semPlot`: used to draw path diagrams
+- `blavaan`: Bayesian lavaan
+
+## Also highly recommended 
+
+(but not used today)
+
+- `semTools`: package that nicely supplements lavaan
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width = 12, fig.height = 6)
+theme_set(theme(text = element_text(size = 20)))
+```
+
+Import Data
+========================================================
+
+
+```{r import}
+ex5_12 <- read.table("https://www.statmodel.com/usersguide/chap5/ex5.12.dat") %>%
+  set_names(paste0("y", 1:12))
+```
+
+Describe Data
+========================================================
+
+```{r describe}
+describe(ex5_12)
+```
+
+Visualize Data
+========================================================
+
+```{r box, fig.height = 12, fig.width = 24}
+ex5_12 %>%
+  pivot_longer(everything(),
+               names_to = "Item",
+               values_to = "Score") %>%
+  ggplot(aes(x = Item, y = Score)) +
+  geom_boxplot()
+```
+
+Visualize Data
+========================================================
+
+```{r viz, fig.height = 14, fig.width = 14}
+corrgram(ex5_12, upper.panel = "panel.cor")
+```
+
+
+Guide to lavaan Syntax
+========================================================
+
+## Correlation/Covariance
+
+```
+y ~~ x
+```
+
+- Mplus equivalent: 
+
+```
+y WITH x;
+```
+
+## Regression
+
+```
+y ~ x
+```
+
+- Mplus equivalent: 
+
+```
+y ON x;
+```
+
+Guide to lavaan Syntax
+========================================================
+
+## Reflective Factors (typical latent variables)
+
+```
+f =~ item1 + item2 + item3
+```
+
+- Mplus equivalent: 
+
+```
+f BY item1 item2 item3;
+```
+
+## Formative Factors
+
+```
+f <- item1 + item2 + item3
+```
+
+- Mplus equivalent: 
+
+```
+f BY;
+f ON item1 item2 item3;
+f@0;
+```
+
+Guide to lavaan Syntax
+========================================================
+
+## Means/Intercepts
+
+```
+f ~ 1
+item1 ~ 1
+```
+
+- Mplus equivalent: 
+
+```
+[f];
+[item1];
+```
+
+## (Residual) Variances
+
+```
+f ~~ f
+```
+
+- Mplus equivalent: 
+
+```
+f;
+```
+
+## Thresholds (for categorical indicators/IRT)
+
+```
+item1 | t1 + t2 + t3 # Assume item1 has 4 ordered categorical responses (3 thresholds)
+item2 | t1 + t2 # Assume item2 has 3 ordered categorical responses (2 thresholds)
+```
+
+- Mplus equivalent: 
+
+```
+[item1$1 item1$2 item1$3];
+[item2$1 item2$2];
+```
+
+Usually you don't need to write syntax for the thresholds (unless doing measurement invariance testing with categorical indicators)
+
+
+Guide to lavaan Syntax
+========================================================
+
+## Fix a parameter to a specific value
+
+### Factor Loadings
+
+```
+f =~ 1*item1 + item2 + item3
+```
+
+- Mplus equivalent: 
+
+```
+f BY item1@1 item2 item3;
+```
+
+### Means/Intercepts
+
+```
+f ~ 0*1
+```
+
+- Mplus equivalent: 
+
+```
+[f@0];
+```
+
+
+### (Residual) Variances
+
+```
+f ~~ 1*f
+```
+
+- Mplus equivalent: 
+
+```
+f@1;
+```
+
+Guide to lavaan Syntax
+========================================================
+
+## Freely estimate a parameter
+
+```
+f =~ NA*item1 + item2 + item3
+```
+
+- Mplus equivalent: 
+
+```
+f BY item1* item2 item3;
+```
+
+## Provide starting values before freely estimating a parameter
+
+```
+f =~ start(1.25)*item1 + item2 + item3
+```
+
+- Mplus equivalent: 
+
+```
+f BY item1*1.25 item2 item3;
+```
+
+Guide to lavaan Syntax
+========================================================
+
+## Assign a label to parameter(s)
+
+```
+f =~ lab1*item1 + lab2*item2 + item3
+```
+
+- Mplus equivalent: 
+
+``` 
+f BY item1 item2 (lab1-lab2)
+     item3;
+```
+
+## Apply equality constraints to two or more parameters
+```
+f =~ l1*item1 + l1*item2 + item3
+```
+
+- Mplus equivalent: 
+
+``` 
+f BY item1 item2 (l1)
+     item3;
+```
+
+
+
+Plan for This Workshop
+========================================================
+
+## Mplus User's Guide Example 5.12
+
+![Mplus Example 5.12](Mplus_5.12.png)
+
+
+Plan for This Workshop
+========================================================
+
+https://www.statmodel.com/ugexcerpts.shtml
+
+https://www.statmodel.com/usersguide/chapter5.shtml
+
+## Steps
+
+1. Measurement Models
+2. Structural Model
+3. Mediation
+
+Measurement Models
+========================================================
+
+1. **f1 & f2**
+2. f3 & f4
+
+![Mplus Example 5.12](Mplus_5.12.png)
+
+Measurement Model 1: f1 & f2
+========================================================
+
+```{r mm1.1, eval = FALSE}
+mm1_f1_f2_m <- '
+f1 =~ y1 + y2 + y3
+f2 =~ y4 + y5 + y6
+
+f1 ~~ f2
+'
+
+mm1_f1_f2_f <- cfa(mm1_f1_f2_m, data = ex5_12)
+```
+
+Other options (non-exhaustive list) to consider including in the `cfa()` function:
+
+- `ordered` - which variables, if any, are ordinal (limits your choice of estimator)
+- `estimator` - probably want "ML" or "MLR" for most continuous data; WLSMV for ordinal
+- `missing` - if there is missing data, how to handle it? Prefer "fiml"
+- `mimic` - do you want the results to try to match what you'd get from Mplus (`mimic = "mplus"`) or EQS (`mimic = "EQS"`)?  
+- `std.lv` - TRUE/FALSE: standardize the latent variable
+- `std.ov` - TRUE/FALSE: standardize the observed variables
+- `orthogonal` - TRUE/FALSE: make all latent variables uncorrelated with one another
+
+Measurement Model 1: f1 & f2
+========================================================
+
+```{r mm1.2}
+mm1_f1_f2_m <- '
+f1 =~ y1 + y2 + y3
+f2 =~ y4 + y5 + y6
+
+f1 ~~ f2
+'
+
+mm1_f1_f2_f <- cfa(mm1_f1_f2_m, data = ex5_12, estimator = "mlr", missing = "fiml")
+summary(mm1_f1_f2_f)
+```
+
+Measurement Model 1: f1 & f2
+========================================================
+
+```{r mm1.3, eval = FALSE}
+mm1_f1_f2_m <- '
+f1 =~ y1 + y2 + y3
+f2 =~ y4 + y5 + y6
+
+f1 ~~ f2
+'
+
+mm1_f1_f2_f <- cfa(mm1_f1_f2_m, data = ex5_12, estimator = "mlr", missing = "fiml")
+summary(mm1_f1_f2_f)
+```
+
+Other options (non-exhaustive list) to consider including in the `summary()` function:
+
+- `fit.measures` - TRUE/FALSE: display model fit statistics
+- `standardized`` - TRUE/FALSE: display standardized parameter estimates
+- `ci` - TRUE/FALSE: display confidence intervals
+- `modindices` - TRUE/FALSE: display modification indices
+
+Measurement Model 1: f1 & f2
+========================================================
+
+```{r mm1.4}
+mm1_f1_f2_m <- '
+f1 =~ y1 + y2 + y3
+f2 =~ y4 + y5 + y6
+
+f1 ~~ f2
+'
+
+mm1_f1_f2_f <- cfa(mm1_f1_f2_m, data = ex5_12, estimator = "mlr", missing = "fiml")
+summary(mm1_f1_f2_f, fit.measures = TRUE, standardized = TRUE)
+```
+
+Measurement Model 1: f1 & f2
+========================================================
+
+## Fit Statistics
+
+```{r mm1.5}
+fitMeasures(mm1_f1_f2_f, c("chisq", "df", "pvalue", "cfi", "tli", 
+                           "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", 
+                           "srmr"),
+            output = "matrix")
+```
+
+
+Measurement Model 1: f1 & f2
+========================================================
+
+## Parameter Estimates
+
+```{r mm1.7}
+parameterEstimates(mm1_f1_f2_f, standardized = TRUE)
+```
+
+Measurement Models
+========================================================
+
+1. f1 & f2
+2. **f3 & f4**
+
+
+![Mplus Example 5.12](Mplus_5.12.png)
+
+Measurement Model 2: f3 & f4
+========================================================
+
+```{r mm2.1}
+mm2_f3_f4_m <- '
+f3 =~ y7 + y8 + y9
+f4 =~ y10 + y11 + y12
+
+f3 ~~ f4
+'
+
+mm2_f3_f4_f <- cfa(mm2_f3_f4_m, data = ex5_12, estimator = "mlr", missing = "fiml")
+```
+
+
+Measurement Model 2: f3 & f4
+========================================================
+
+```{r mm2.2}
+summary(mm2_f3_f4_f, fit.measures = TRUE, standardized = TRUE)
+```
+
+Measurement Model 2: f3 & f4
+========================================================
+
+## Fit Statistics
+
+```{r mm2.3}
+fitMeasures(mm2_f3_f4_f, c("chisq", "df", "pvalue", "cfi", "tli", 
+                           "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", 
+                           "srmr"),
+            output = "matrix")
+```
+
+
+Measurement Model 2: f3 & f4
+========================================================
+
+## Parameter Estimates
+
+```{r mm2.5}
+parameterEstimates(mm2_f3_f4_f, standardized = TRUE)
+```
+
+Structural Model
+========================================================
+
+## Exericse: Write the syntax for this model on your own
+
+![Mplus Example 5.12](Mplus_5.12.png)
+
+
+Structural Model
+========================================================
+
+```{r sm1}
+sm1_m <- '
+f1 =~ y1 + y2 + y3
+f2 =~ y4 + y5 + y6
+
+f3 =~ y7 + y8 + y9
+f4 =~ y10 + y11 + y12
+
+f1 ~~ f2
+
+f4 ~ f3
+f3 ~ f1 + f2
+'
+
+sm1_f <- sem(sm1_m, data = ex5_12, estimator = "mlr", missing = "fiml")
+summary(sm1_f, fit.measures = TRUE, standardized = TRUE)
+```
+
+Structural Model
+========================================================
+
+## Fit Statistics
+
+```{r sm2}
+fitMeasures(sm1_f, c("chisq", "df", "pvalue", "cfi", "tli", 
+                           "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", 
+                           "srmr"),
+            output = "matrix")
+```
+
+Structural Model
+========================================================
+
+## Parameter Estimates
+
+```{r sm4}
+parameterEstimates(sm1_f, standardized = TRUE)
+```
+
+Structural Model Results
+========================================================
+
+```{r sm5, fig.height = 12, fig.width = 24}
+semPaths(sm1_f, layout = "tree2", what = "path", whatLabels = "std", 
+         style = "lisrel", intercepts = FALSE, rotation = 2)
+```
+
+Saving semPaths Figures for Editing
+========================================================
+
+## Not recommended
+
+```{r sm6, fig.height = 12, fig.width = 24}
+svg("Path Diagram.svg")
+semPaths(sm1_f, layout = "tree2", what = "path", whatLabels = "std", 
+         style = "lisrel", intercepts = FALSE, rotation = 2)
+dev.off()
+```
+
+## Recommended
+
+Download draw.io (https://www.diagrams.net/) and create your own.
+
+
+Mediation Model
+========================================================
+
+## Exericse: Write the syntax for this model on your own
+
+![Mediation Model](Mediation.png)
+
+
+Mediation Model
+========================================================
+
+```{r mm1, eval = FALSE}
+mm1_m <- '
+f1 =~ y1 + y2 + y3
+f2 =~ y4 + y5 + y6
+
+f3 =~ y7 + y8 + y9
+f4 =~ y10 + y11 + y12
+
+f1 ~~ f2
+
+f4 ~ f3
+f3 ~ f1 + f2
+
+# New (c` path)
+f4 ~ f1
+'
+```
+
+Mediation Model
+========================================================
+
+## How to estimate the indirect effects?
+
+```{r mm2}
+mm1_m <- '
+f1 =~ y1 + y2 + y3
+f2 =~ y4 + y5 + y6
+
+f3 =~ y7 + y8 + y9
+f4 =~ y10 + y11 + y12
+
+f1 ~~ f2
+
+f4 ~ b*f3
+f3 ~ a*f1 + f2
+
+# New (c` path)
+f4 ~ cprime*f1
+
+# Indirect (Mediation) Effects
+
+# Create a new variable representing the product of a times b
+
+ind := a * b
+
+# Total Effect
+
+# Create a new variable representing the product of ind times cprime
+tot := ind * cprime
+'
+```
+
+Mediation Model
+========================================================
+
+## How to get bootstrap standard errors for the indirect effect?
+
+```{r mm3, cache = TRUE}
+set.seed(90210)
+mm1_f <- sem(mm1_m, data = ex5_12, estimator = "ml", missing = "fiml", se = "bootstrap", bootstrap = 2000)
+summary(mm1_f, fit.measures = TRUE, standardized = TRUE)
+```
+
+Mediation Model
+========================================================
+
+## Fit Statistics
+
+```{r mm4}
+fitMeasures(mm1_f, c("chisq", "df", "pvalue", "cfi", "tli", 
+                           "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", 
+                           "srmr"),
+            output = "matrix")
+```
+
+
+Mediation Model
+========================================================
+
+## Parameter Estimates (part 1)
+
+```{r mm7, width = 100}
+parameterEstimates(mm1_f, boot.ci.type = "bca.simple", standardized = TRUE) %>%
+  slice_head(prop = .5)
+```
+
+Mediation Model
+========================================================
+
+## Parameter Estimates (part 2)
+
+```{r mm8, width = 100}
+parameterEstimates(mm1_f, boot.ci.type = "bca.simple", standardized = TRUE) %>%
+  slice_tail(prop = .5)
+```
+
+Mediation Model Results
+========================================================
+
+```{r mm9, fig.height = 12, fig.width = 24}
+semPaths(mm1_f, layout = "tree2", what = "path", whatLabels = "std", 
+         style = "lisrel", intercepts = FALSE, rotation = 2)
+```
+
+Mediation Model: Bayesian Alternative
+========================================================
+
+## `blavaan` package
+
+```{r bl1, eval = FALSE, cache = TRUE}
+bmm1_f <- bsem(mm1_m, data = ex5_12,
+               n.chains = 4, burnin = 1000, sample = 4000, inits = "Mplus", seed = 90210)
+summary(bmm1_f, fit.measures = TRUE, standardized = TRUE)
+```
