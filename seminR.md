@@ -4,7 +4,6 @@ author: Brandon Gavett
 date: 2022-04-13
 autosize: true
 
-Workshop Goals
 ========================================================
 
 We will explore the `lavaan` package and how it can be used to perform structural equation modeling in R.
@@ -463,7 +462,7 @@ summary(mm1_f1_f2_f)
 Other options (non-exhaustive list) to consider including in the `summary()` function:
 
 - `fit.measures` - TRUE/FALSE: display model fit statistics
-- `standardized`` - TRUE/FALSE: display standardized parameter estimates
+- `standardized` - TRUE/FALSE: display standardized parameter estimates
 - `ci` - TRUE/FALSE: display confidence intervals
 - `modindices` - TRUE/FALSE: display modification indices
 
